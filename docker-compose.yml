@@ -1,0 +1,99 @@
+# Docker Compose para MedicBank Microservices
+version: '3.8'
+
+services:
+  # Attendance Service
+  attendance-service:
+    build: 
+      context: ./services/attendance-service
+      target: development
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=medicbank_user
+      - DATABASE_PASSWORD=medicbank_pass
+      - DATABASE_NAME=medicbank_attendance
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=attendance_jwt_secret_super_seguro_32chars
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    volumes:
+      - ./services/attendance-service:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - medicbank-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_DB: medicbank_attendance
+      POSTGRES_USER: medicbank_user
+      POSTGRES_PASSWORD: medicbank_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./services/attendance-service/migrations:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - medicbank-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - medicbank-network
+    command: redis-server --appendonly yes
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: medicbank_user
+      RABBITMQ_DEFAULT_PASS: medicbank_pass
+      RABBITMQ_DEFAULT_VHOST: /medicbank
+    ports:
+      - "5672:5672"     # AMQP port
+      - "15672:15672"   # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    networks:
+      - medicbank-network
+
+  # PgAdmin (opcional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@medicbank.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - medicbank-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  medicbank-network:
+    driver: bridge
